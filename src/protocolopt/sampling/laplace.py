@@ -15,15 +15,13 @@ class LaplaceApproximation(InitialConditionGenerator):
         self, 
         dt: float, 
         gamma: float, 
-        epsilon: float,
         mass: float, 
         centers: torch.Tensor, 
         device: torch.device,
         beta: float = 1.0,
         spatial_dimensions: int = 1, 
         time_steps: int = 1000,
-        num_samples: int = 1000,
-        energy_factor: float = 1
+        num_samples: int = 1000
     ) -> None:
         """Initializes LaplaceApproximation.
 
@@ -46,9 +44,9 @@ class LaplaceApproximation(InitialConditionGenerator):
         self.beta = beta
         self.spatial_dimensions = spatial_dimensions
         self.time_steps = time_steps
-        self.energy_factor = energy_factor
         self.num_samples = num_samples
-        self.noise_sigma = torch.tensor(epsilon)
+
+        self.noise_sigma = torch.sqrt(torch.tensor(2 * self.gamma / self.beta))
         
         self.hparams = {
             'centers_shape': list(self.centers.shape),
@@ -62,11 +60,11 @@ class LaplaceApproximation(InitialConditionGenerator):
             'name': self.__class__.__name__
         }
 
-    def _solve_landscape(self, potential: Potential, protocol: Protocol, energy_factor: float = 1) -> None:
+    def _solve_landscape(self, potential: Potential, protocol: Protocol) -> None:
         """Computes the Hessian and log weights at the centers."""
         coeff_at_t0 = protocol.get_protocol_tensor()[:, 0]
         def potential_kernel(x):
-            return potential.potential_value(x, coeff_at_t0) * torch.tensor(energy_factor)
+            return potential.potential_value(x, coeff_at_t0)
 
         batched_hessian_func = vmap(hessian(potential_kernel), in_dims = 0)
 
@@ -123,10 +121,9 @@ class LaplaceApproximation(InitialConditionGenerator):
         Returns:
             Tuple of (initial_pos, initial_vel, noise).
         """
-
         if not hasattr(self, 'log_weights'):
             print("Solving landscape for Laplace approximation...")
-            self._solve_landscape(potential, protocol, energy_factor=self.energy_factor)
+            self._solve_landscape(potential, protocol)
             print("Landscape solved")
 
         initial_pos = self._get_initial_positions()

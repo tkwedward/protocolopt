@@ -56,8 +56,9 @@ class QuarticPotentialWithLinearTerm(Potential):
 class QFP_Potential(Potential):
     """Potential of form V(x, t) = 1/2 * (phi_1 - phi_1x)**2 + beta * cos(phi_1) * cos(phi_1xdc/2)."""
 
-    def __init__(self, compile_mode: bool = True):
+    def __init__(self, compile_mode: bool = True, U_0 = 1.0):
         super().__init__(compile_mode)
+        self.U_0 = U_0
         self.hparams = {
             'name': self.__class__.__name__,
             'compile_mode': self.compile_mode
@@ -76,12 +77,5 @@ class QFP_Potential(Potential):
             Potential value.
         """
         beta = 2.3
-        k_B, h_bar, PHI_0 = 1.380649e-23, 1.054571817e-34, 2.067833831e-15
-        x_c = PHI_0 / (2 * np.pi)  # Convert to appropriate units
-        L, T = 5e-12, 4.2,
-        k_BT = k_B * T
-        U_0 = x_c**2 / L / k_BT
-        U_0 = 1.0
-
-        return torch.sum(U_0 * 1/2 * (space_grid - protocol_tensor[0])**2 + U_0 * beta * torch.cos(space_grid) * torch.cos(protocol_tensor[1]/2), dim=-1)
+        return torch.sum(self.U_0 * 1/2 * (space_grid - protocol_tensor[0])**2 + self.U_0 * beta * torch.cos(space_grid) * torch.cos(protocol_tensor[1]/2), dim=-1)
         # return torch.sum(1/2 * (space_grid - protocol_tensor[0])**2 + beta * torch.cos(space_grid) * torch.cos(protocol_tensor[1]/2), dim=-1)

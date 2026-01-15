@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 class EulerMaruyama(Simulator):
     """Simulator implementation using the Euler-Maruyama method."""
 
-    def __init__(self, mode: str, beta: float = 1.0, gamma: float = 1.0, xi: float = 1.0, epsilon: float = 1.0, mass: float = 1.0, dt: float = None, compile_mode: bool = True) -> None:
+    def __init__(self, mode: str, gamma: float, beta: float = 1.0, mass: float = 1.0, dt: float = None, compile_mode: bool = True) -> None:
         """Initializes the EulerMaruyama simulator.
 
         Args:
@@ -39,8 +39,8 @@ class EulerMaruyama(Simulator):
         self.gamma = gamma
         self.beta = beta
         self.compile_mode = compile_mode
-        self.xi = xi
-        self.noise_sigma = torch.tensor(epsilon)
+
+        self.noise_sigma = torch.sqrt(torch.tensor(2 * self.gamma / self.beta))
 
         self._compiled_underdamped_step = robust_compile(self._underdamped_step, compile_mode=self.compile_mode)
         self._compiled_overdamped_step = robust_compile(self._overdamped_step, compile_mode=self.compile_mode)
@@ -61,9 +61,9 @@ class EulerMaruyama(Simulator):
         return current_pos - (dv_dx * dt - noise) / gamma
 
     @staticmethod
-    def _underdamped_step(current_pos, current_vel, dv_dx, noise, dt, gamma, xi, mass):
+    def _underdamped_step(current_pos, current_vel, dv_dx, noise, dt, gamma, mass):
         next_pos = current_pos + current_vel * dt
-        next_vel = current_vel + (- gamma * current_vel * dt - xi * dv_dx * dt + noise) / mass
+        next_vel = current_vel + ( -1 * gamma * current_vel * dt - dv_dx * dt + noise) / mass
         return next_pos, next_vel
 
     def _compute_malliavin_weight(self, dv_dxda, noise, noise_sigma):
@@ -138,7 +138,7 @@ class EulerMaruyama(Simulator):
 
                 # Compute next positions and velocities
                 next_pos, next_vel = self._compiled_underdamped_step(
-                                    current_pos, current_vel, dv_dx, noise[..., i], dt, self.gamma, self.xi, self.mass
+                                    current_pos, current_vel, dv_dx, noise[..., i], dt, self.gamma, self.mass
                                 )
                 traj_pos_list.append(next_pos)
                 traj_vel_list.append(next_vel)
