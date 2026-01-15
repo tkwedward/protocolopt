@@ -1,0 +1,73 @@
+import torch
+from ..core.types import PotentialTensor, MicrostatePaths, ControlSignal
+
+def velocity_loss(microstate_paths: MicrostatePaths) -> torch.Tensor:
+    """Calculates the mean squared final velocity.
+
+    Args:
+        microstate_paths: Microstate path data.
+                           Shape: (Batch, Spatial_Dim, Time_Steps+1, 2)
+                           Dimension 3 is (position, velocity).
+
+    Returns:
+        Mean squared final velocity. Shape: (Batch,)
+    """
+    mass = 1.0  # Assuming mass = 1 for simplicity; modify as needed
+    U_0 = 373.5673904050238
+    eqm_KE = 0.5
+    final_velocities = microstate_paths[:, :, -1, 1]  # Extract final velocities
+    average_KE = torch.mean(0.5 * mass * final_velocities**2 * U_0, dim=1) 
+    # print(average_KE)
+    return (average_KE - eqm_KE)**2 # Mean over spatial dimensions
+
+def work_loss(potential_tensor):
+    """Calculates the discrete work increment sum Delta V.
+
+    Args:
+        potential_tensor: Potential values along paths.
+
+    Returns:
+        Total work done along each path.
+    """
+    return (potential_tensor[...,1:] - potential_tensor[...,:-1]).sum(axis = -1)
+
+def variance_loss(microstate_paths: MicrostatePaths, starting_bits_int: torch.Tensor, domain_size: int, phase_dimension: int = 0) -> torch.Tensor:
+    """Computes the variance of microstate paths that started together.
+
+    Args:
+        microstate_paths: Microstate path data.
+                           Shape: (Batch, Spatial_Dim, Time_Steps+1, 2)
+                           Dimension 3 is (position, velocity).
+        starting_bits_int: Starting bit states.
+                           Shape: (Batch,)
+        domain_size: Number of possible starting states (Decimal range of bitstring).
+        phase_dimension: 0 for position, 1 for velocity.
+
+    Returns:
+        Variance loss. Shape: (Batch,)
+    """
+    #microstate_paths is of shape (num_samples, spatial_dimensions, time_steps+1, 2 (position and velocity))
+    #starting_bits_int is of shape (num_samples,)
+    #domain_size is the number of possible starting bits
+    #phase_dimension is the dimension of the phase to compute the variance of, allowing for seperate position and velocity loss computations
+    var_loss = torch.zeros(microstate_paths.shape[0], device=microstate_paths.device)
+    for i in range(domain_size):
+        mask = starting_bits_int == i
+        if mask.any():
+            var_loss[mask] = ((microstate_paths[mask, :, :, phase_dimension] -
+                   microstate_paths[mask, :, :, phase_dimension].mean(axis=0, keepdim=True))**2
+                  ).mean(dim=(1, 2)) #compute the variance using cohort mean over space and time then mean each trajectories var over space and time
+    return var_loss
+
+def temporal_smoothness_penalty(protocol_tensor, dt):
+    """Calculates the mean squared time-derivative of control parameters.
+
+    Args:
+        protocol_tensor: Time-dependent control signals.
+        dt: Time step size.
+
+    Returns:
+        Mean squared derivative penalty.
+    """
+    dcoeff_dt = (protocol_tensor[:, 1:] - protocol_tensor[:, :-1]) / dt
+    return (dcoeff_dt ** 2).mean()
